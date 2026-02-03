@@ -1,0 +1,222 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user account within the TeamDesk application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user.",
+          "format": "uuid"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Hashed password of the user. Store the password hash NOT the plain password."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the user account was created.",
+          "format": "date-time"
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "Timestamp indicating the user's last login.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "passwordHash",
+        "createdAt"
+      ]
+    },
+    "Machine": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Machine",
+      "type": "object",
+      "description": "Represents a machine (remote host) accessible through TeamDesk.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the machine."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Machine) The ID of the user who owns this machine."
+        },
+        "name": {
+          "type": "string",
+          "description": "The machine name."
+        },
+        "connectionId": {
+          "type": "string",
+          "description": "The AnyDesk-style connection ID. Generated for the machine."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the machine."
+        },
+        "lastConnected": {
+          "type": "string",
+          "description": "Timestamp of the last successful connection to the machine.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the machine (e.g., online, offline).",
+          "format": "string"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "connectionId"
+      ]
+    },
+    "Session": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Session",
+      "type": "object",
+      "description": "Represents an active connection session.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the session."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Session) The ID of the user associated with this session."
+        },
+        "machineId": {
+          "type": "string",
+          "description": "Reference to Machine. (Relationship: Machine 1:N Session) The ID of the machine being accessed in this session."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "Timestamp indicating when the session started.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "Timestamp indicating when the session ended. Null if the session is still active.",
+          "format": "date-time"
+        },
+        "connectionType": {
+          "type": "string",
+          "description": "Type of connection used (e.g., ID-based, Account-based)."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "machineId",
+        "startTime",
+        "connectionType"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user account information.  Path-based ownership, the ID of the document is the user's UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/machines/{machineId}",
+        "definition": {
+          "entityName": "Machine",
+          "schema": {
+            "$ref": "#/backend/entities/Machine"
+          },
+          "description": "Stores machine information owned by a specific user. Enforces path-based ownership for machines.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user."
+            },
+            {
+              "name": "machineId",
+              "description": "The unique ID of the machine."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/machines/{machineId}/sessions/{sessionId}",
+        "definition": {
+          "entityName": "Session",
+          "schema": {
+            "$ref": "#/backend/entities/Session"
+          },
+          "description": "Stores session information related to a specific machine owned by a user. Continues path-based ownership for nested data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user."
+            },
+            {
+              "name": "machineId",
+              "description": "The unique ID of the machine."
+            },
+            {
+              "name": "sessionId",
+              "description": "The unique ID of the session."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Collection used to grant admin roles based on document existence. Supports global roles using DBAC.  The presence of a document indicates the user is an admin.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user with admin privileges."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support user authentication (email/password and anonymous), machine management, and session tracking for a remote access application. The structure prioritizes authorization independence by avoiding hierarchical `get()` calls in security rules. Path-based ownership is used for user-owned data (Machines, Sessions), ensuring secure list operations (QAPs). Data is segregated into collections based on access needs.\n\n*   `/users/{userId}`: Stores user account information.\n*   `/users/{userId}/machines/{machineId}`: Stores machine information owned by a specific user. This structure enforces path-based ownership for machines, ensuring only the owning user can manage them.\n*   `/users/{userId}/machines/{machineId}/sessions/{sessionId}`: Stores session information related to a specific machine owned by a user.  Continues path-based ownership for nested data.\n*   `/roles_admin/{userId}`:  A collection used to grant admin roles based on document existence. Supports global roles using DBAC (Database-Based Access Control).\n\nAuthorization Independence:\nAll authorization checks can be performed directly on the document being accessed or created, or through simple existence checks (e.g., `/roles_admin/{userId}`). The structure avoids reading parent documents to determine authorization. For example, access to a `machine` is determined by the `userId` parameter in the path `/users/{userId}/machines/{machineId}`, and can be secured using `request.auth.uid == userId`.\n\nQAPs (Rules are Not Filters):\nThe structure enables secure list operations because data with different access needs are stored in separate collections. Listing machines under `/users/{userId}/machines/{machineId}` is inherently secure, as the rule only needs to check if `request.auth.uid == userId`.  Similarly, listing sessions for a machine under `/users/{userId}/machines/{machineId}/sessions/{sessionId}` can be secured using the same principle."
+  }
+}

@@ -1,0 +1,166 @@
+/**
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model combined with a global,
+ * read-only administrator role. The fundamental principle is that users have
+ * complete control over their own data, and no one else can modify it.
+ * Administrators are granted read-only access to all user data for support and
+ * moderation purposes but are explicitly forbidden from making modifications.
+ *
+ * Data Structure:
+ * The data is organized hierarchically under a top-level `/users` collection.
+ * Each user's data, including their machines and sessions, is nested within their
+ * user document: `/users/{userId}/machines/{machineId}/sessions/{sessionId}`.
+ * A separate top-level collection, `/roles_admin`, is used to manage global
+ * administrator privileges.
+ *
+ * Key Security Decisions:
+ * - Strict Ownership: All user-generated content (machines, sessions) is
+ *   secured using path-based rules, ensuring only the owner can perform writes.
+ * - Read-Only Admins: Users with a document in `/roles_admin/{userId}` can read
+ *   any user's data but cannot write to it. This provides oversight capability
+ *   without risking data integrity.
+ * - No User Enumeration: Listing the top-level `/users` collection is disallowed
+ *   to protect user privacy and prevent scraping.
+ * - Client-Side Admin Management Disabled: The `/roles_admin` collection is
+ *   locked down from all client-side reads and writes. Admin roles must be
+ *   assigned out-of-band (e.g., via the Firebase Console or a trusted server)
+ *   to prevent privilege escalation attacks.
+ *
+ * Denormalization for Authorization:
+ * - Path-Based Ownership: The user's UID is part of the document path (e.g.,
+ *   `/users/{userId}/...`), which allows for simple, fast, and cost-effective
+ *   authorization checks without needing to read other documents.
+ * - Relational Integrity Fields: Documents like `Machine` and `Session` contain a
+ *   `userId` field. The rules enforce that this field matches the `{userId}` in
+ *   the path upon creation and remains immutable on updates, ensuring data
+ *   consistency.
+ * - Existence-Based Roles: The presence of a document at
+ *   `/roles_admin/{auth.uid}` grants admin privileges. This is checked with a
+ *   single, performant `exists()` call.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --------------------------------
+    // Helper Functions
+    // --------------------------------
+
+    /**
+     * Checks if a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the currently authenticated user is the owner of the resource.
+     * Compares the request's auth UID with the userId from the path.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if the currently authenticated user has an admin role.
+     * This is determined by the existence of their UID in the roles_admin collection.
+     */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    /**
+     * Grants read access to the document owner or an admin.
+     */
+    function canRead(userId) {
+      return isOwner(userId) || isAdmin();
+    }
+    
+    /**
+     * Verifies a document exists before an update or delete operation.
+     */
+    function isExistingDoc() {
+      return resource != null;
+    }
+
+    // --------------------------------
+    // User Profile Rules
+    // --------------------------------
+
+    /**
+     * @description Manages user profile documents. A user can create their own profile,
+     *              and can only read, update, or delete their own document. Admins
+     *              can read user profiles but cannot modify them.
+     * @path        /users/{userId}
+     * @allow       (create) A new user signing up: request.auth.uid matches {userId}.
+     * @deny        (update) A user trying to update another user's profile.
+     * @principle   Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if canRead(userId);
+      allow list: if false; // Disallow listing all users for privacy
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && isExistingDoc() && request.resource.data.id == resource.data.id;
+      allow delete: if isOwner(userId) && isExistingDoc();
+    }
+
+    // --------------------------------
+    // Machine Rules
+    // --------------------------------
+
+    /**
+     * @description Manages machines owned by a user. A user can perform all operations
+     *              on their own machines. Admins can read machine details but cannot
+     *              create, update, or delete them.
+     * @path        /users/{userId}/machines/{machineId}
+     * @allow       (create) An authenticated user creating a machine document for themselves.
+     * @deny        (delete) An admin trying to delete a user's machine.
+     * @principle   Enforces document ownership for all writes within a user's private subcollection.
+     */
+    match /users/{userId}/machines/{machineId} {
+      allow get: if canRead(userId);
+      allow list: if canRead(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isOwner(userId) && isExistingDoc() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(userId) && isExistingDoc();
+    }
+
+    // --------------------------------
+    // Session Rules
+    // --------------------------------
+    
+    /**
+     * @description Manages connection sessions for a specific machine. Access follows
+     *              the same ownership pattern as machines.
+     * @path        /users/{userId}/machines/{machineId}/sessions/{sessionId}
+     * @allow       (list) An authenticated user listing their own session history for a machine.
+     * @deny        (create) A user trying to create a session record for another user's machine.
+     * @principle   Validates relational integrity by ensuring session data correctly references its parent user and machine paths.
+     */
+    match /users/{userId}/machines/{machineId}/sessions/{sessionId} {
+      allow get: if canRead(userId);
+      allow list: if canRead(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId && request.resource.data.machineId == machineId;
+      allow update: if isOwner(userId) && isExistingDoc() && request.resource.data.userId == resource.data.userId && request.resource.data.machineId == resource.data.machineId;
+      allow delete: if isOwner(userId) && isExistingDoc();
+    }
+    
+    // --------------------------------
+    // Admin Role Rules
+    // --------------------------------
+
+    /**
+     * @description Defines global admin roles. This collection is managed out-of-band
+     *              (e.g., via Firebase Console or a backend service) and is locked
+     *              down from all client access to prevent privilege escalation.
+     * @path        /roles_admin/{userId}
+     * @allow       No client operations are permitted.
+     * @deny        (read/write) Any client attempting to read or write to this collection.
+     * @principle   Secures role-granting collections by making them inaccessible to clients.
+     */
+    match /roles_admin/{userId} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}
