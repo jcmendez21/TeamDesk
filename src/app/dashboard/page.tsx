@@ -7,6 +7,7 @@ import { BentoGrid, BentoGridItem } from '@/components/dashboard/bento-grid';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 const machines = [
   {
