@@ -1,30 +1,65 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, KeyRound, ArrowRight } from "lucide-react";
+import { Copy, KeyRound, ArrowRight, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useUser, useFirestore, addDocumentNonBlocking, useMemoFirebase } from "@/firebase";
+import { collection } from "firebase/firestore";
 
 export default function Home() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useUser();
+  const firestore = useFirestore();
+
   const [localId, setLocalId] = useState(".........");
   const [localPassword, setLocalPassword] = useState("******");
   const [remoteId, setRemoteId] = useState("");
 
   useEffect(() => {
-    // Generate a random 9-digit ID
     const newId = Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
-    setLocalId(newId.replace(/(\d{3})(?=\d)/g, '$1 ')); // Add spaces for readability
+    setLocalId(newId.replace(/(\d{3})(?=\d)/g, '$1 '));
 
-    // Generate a random 6-character password
     const newPassword = Math.random().toString(36).substring(2, 8);
     setLocalPassword(newPassword);
   }, []);
+  
+  const machinesCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/machines`);
+  }, [user, firestore]);
+
+  const handleAddThisMachine = async () => {
+    if (!machinesCollection || !user) {
+      toast({
+        title: "Not Logged In",
+        description: "You must be logged in to add a machine.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newMachine = {
+      name: 'This PC', // Default name, user can change it in dashboard
+      description: 'Added from the home page.',
+      connectionId: localId.replace(/\s/g, ''),
+      userId: user.uid,
+      status: 'offline', // Default to offline, a real agent would set this to online
+    };
+
+    addDocumentNonBlocking(machinesCollection, newMachine);
+
+    toast({
+      title: "Machine Added",
+      description: "This PC has been added to your dashboard.",
+    });
+  };
 
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +120,12 @@ export default function Home() {
                 </Button>
               </div>
             </div>
+             {user && (
+              <Button onClick={handleAddThisMachine} className="w-full mt-4">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add this PC to My Machines
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -124,3 +165,4 @@ export default function Home() {
     </div>
   );
 }
+
