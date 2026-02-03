@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import Header from '@/components/header';
 import ReactQueryProvider from '@/components/react-query-provider';
+import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
   title: 'TeamDesk',
@@ -29,13 +30,15 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <ReactQueryProvider>
-          <div className="flex min-h-screen flex-col">
-            <Header />
-            <main className="flex-1">{children}</main>
-          </div>
-          <Toaster />
-        </ReactQueryProvider>
+        <FirebaseClientProvider>
+          <ReactQueryProvider>
+            <div className="flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1">{children}</main>
+            </div>
+            <Toaster />
+          </ReactQueryProvider>
+        </FirebaseClientProvider>
       </body>
     </html>
   );
