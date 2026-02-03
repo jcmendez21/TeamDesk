@@ -35,6 +35,9 @@ interface Machine {
 
 const addMachineSchema = z.object({
   name: z.string().min(1, 'Machine name is required.'),
+  connectionId: z.string().refine(val => val.replace(/\s/g, '').length === 9 && /^\d+$/.test(val.replace(/\s/g, '')), {
+    message: 'Connection ID must be a 9-digit number.'
+  }),
   description: z.string().optional(),
 });
 
@@ -64,6 +67,7 @@ export default function DashboardPage() {
     resolver: zodResolver(addMachineSchema),
     defaultValues: {
       name: '',
+      connectionId: '',
       description: '',
     },
   });
@@ -77,12 +81,10 @@ export default function DashboardPage() {
   async function onAddMachine(values: z.infer<typeof addMachineSchema>) {
     if (!user || !machinesQuery) return;
     
-    const connectionId = Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
-
     const newMachine = {
       name: values.name,
       description: values.description || '',
-      connectionId,
+      connectionId: values.connectionId.replace(/\s/g, ''),
       userId: user.uid,
       status: 'offline', // Default status
     };
@@ -141,6 +143,19 @@ export default function DashboardPage() {
                       <FormLabel>Machine Name</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., My Work Laptop" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="connectionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Connection ID</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 123 456 789" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
