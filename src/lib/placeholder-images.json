@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "machine-1",
+      "description": "A computer desktop with code editor open",
+      "imageUrl": "https://images.unsplash.com/photo-1632748635751-295ae5513c1a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxkZXNrdG9wJTIwY29kZXxlbnwwfHx8fDE3Njk5NzE5MTd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "desktop code"
+    },
+    {
+      "id": "machine-2",
+      "description": "A computer desktop with design software open",
+      "imageUrl": "https://images.unsplash.com/photo-1676282824852-4c4d70f76cfe?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxkZXNrdG9wJTIwZGVzaWdufGVufDB8fHx8MTc3MDA4NjI3M3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "desktop design"
+    },
+    {
+      "id": "machine-3",
+      "description": "A server rack in a data center",
+      "imageUrl": "https://images.unsplash.com/photo-1651955784685-f969100bfc25?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxzZXJ2ZXIlMjBkYXRhLWNlbnRlcnxlbnwwfHx8fDE3NzAwODYyNzN8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "server data-center"
+    },
+    {
+      "id": "machine-4",
+      "description": "A laptop on a desk",
+      "imageUrl": "https://images.unsplash.com/photo-1487017159836-4e23ece2e4cf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxsYXB0b3AlMjBkZXNrfGVufDB8fHx8MTc3MDAxNTQzMHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "laptop desk"
+    },
+    {
+      "id": "machine-5",
+      "description": "A person working on a computer",
+      "imageUrl": "https://images.unsplash.com/photo-1571826867433-29518cc0b091?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxwZXJzb24lMjBjb21wdXRlcnxlbnwwfHx8fDE3NzAwMTE4MTd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person computer"
+    }
+  ]
 }
