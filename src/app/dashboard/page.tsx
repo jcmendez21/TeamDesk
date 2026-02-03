@@ -40,10 +40,10 @@ const addMachineSchema = z.object({
 
 // Mock data for recent sessions
 const recentSessions = [
-  { id: 1, sessionId: 'S3S-7A9-3B1', machineName: 'Workstation-01', date: '2024-07-28', duration: '1h 24m' },
-  { id: 2, sessionId: 'K8D-4F2-9C5', machineName: 'Design-PC', date: '2024-07-28', duration: '45m' },
-  { id: 3, sessionId: 'P5G-1H8-6J0', machineName: 'Home-Server', date: '2024-07-27', duration: '5h 12m' },
-  { id: 4, sessionId: 'L2N-9B4-8D7', machineName: 'MacBook-Pro', date: '2024-07-26', duration: '3h 30m' },
+  { id: 1, connectionId: '123 456 789', machineName: 'Workstation-01', date: '2024-07-28', duration: '1h 24m' },
+  { id: 2, connectionId: '987 654 321', machineName: 'Design-PC', date: '2024-07-28', duration: '45m' },
+  { id: 3, connectionId: '112 233 445', machineName: 'Home-Server', date: '2024-07-27', duration: '5h 12m' },
+  { id: 4, connectionId: '556 677 889', machineName: 'MacBook-Pro', date: '2024-07-26', duration: '3h 30m' },
 ];
 
 export default function DashboardPage() {
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Session ID</TableHead>
+                            <TableHead>Connection ID</TableHead>
                             <TableHead>Machine</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">Duration</TableHead>
@@ -220,7 +220,7 @@ export default function DashboardPage() {
                     <TableBody>
                         {recentSessions.map((session) => (
                         <TableRow key={session.id}>
-                            <TableCell className="font-medium font-code">{session.sessionId}</TableCell>
+                            <TableCell className="font-medium font-code">{session.connectionId}</TableCell>
                             <TableCell className="font-medium">{session.machineName}</TableCell>
                             <TableCell>{session.date}</TableCell>
                             <TableCell className="text-right">{session.duration}</TableCell>
