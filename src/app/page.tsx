@@ -1,16 +1,18 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, KeyRound, ArrowRight, PlusCircle } from "lucide-react";
+import { Copy, KeyRound, ArrowRight, PlusCircle, Clock, Laptop } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useUser, useFirestore, addDocumentNonBlocking, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { useUser, useFirestore, addDocumentNonBlocking, useMemoFirebase, useCollection } from "@/firebase";
+import { collection, query, orderBy } from "firebase/firestore";
+import { useRecentConnections } from "@/hooks/use-recent-connections";
+import HostSessionHandler from "@/components/session/host-session-handler";
 
 export default function Home() {
   const router = useRouter();
@@ -21,6 +23,9 @@ export default function Home() {
   const [localId, setLocalId] = useState(".........");
   const [localPassword, setLocalPassword] = useState("******");
   const [remoteId, setRemoteId] = useState("");
+  const [hostStream, setHostStream] = useState<MediaStream | null>(null);
+
+  const { recents, addRecent } = useRecentConnections();
 
   useEffect(() => {
     const newId = Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
@@ -29,11 +34,24 @@ export default function Home() {
     const newPassword = Math.random().toString(36).substring(2, 8);
     setLocalPassword(newPassword);
   }, []);
-  
+
   const machinesCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return collection(firestore, `users/${user.uid}/machines`);
   }, [user, firestore]);
+
+  const savedMachinesQuery = useMemoFirebase(() => {
+    if (!machinesCollection) return null;
+    return query(machinesCollection, orderBy("name"));
+  }, [machinesCollection]);
+
+  const { data: savedMachines } = useCollection(savedMachinesQuery);
+
+  const filteredRecents = recents.filter(recent => {
+    // Exclude if it's in saved machines
+    if (!savedMachines) return true;
+    return !savedMachines.some(saved => saved.connectionId === recent.id);
+  });
 
   const handleAddThisMachine = async () => {
     if (!machinesCollection || !user) {
@@ -61,10 +79,33 @@ export default function Home() {
     });
   };
 
-  const handleConnect = (e: React.FormEvent) => {
+  const handleStartSharing = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false
+      });
+      setHostStream(stream);
+
+      stream.getVideoTracks()[0].onended = () => {
+        setHostStream(null);
+      };
+    } catch (err) {
+      console.error("Error sharing screen:", err);
+      toast({
+        title: "Sharing Cancelled",
+        description: "Could not start screen sharing.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleConnect = (e: FormEvent) => {
     e.preventDefault();
     if (remoteId.replace(/\s/g, "").length === 9) {
-      router.push(`/session/${remoteId.replace(/\s/g, "")}`);
+      const cleanId = remoteId.replace(/\s/g, "");
+      addRecent(cleanId);
+      router.push(`/session/${cleanId}`);
     } else {
       toast({
         title: "Invalid ID",
@@ -73,7 +114,7 @@ export default function Home() {
       });
     }
   };
-  
+
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text.replace(/\s/g, ''));
     toast({
@@ -113,18 +154,32 @@ export default function Home() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="your-password">One-Time Password</Label>
-               <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Input id="your-password" value={localPassword} readOnly className="font-code text-lg" />
-                 <Button variant="outline" size="icon" onClick={() => copyToClipboard(localPassword, 'Password')}>
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(localPassword, 'Password')}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-             {user && (
+            {user && (
               <Button onClick={handleAddThisMachine} className="w-full mt-4">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add this PC to My Machines
               </Button>
+            )}
+
+            {!hostStream ? (
+              <Button
+                onClick={handleStartSharing}
+                className="w-full mt-2 bg-green-600 hover:bg-green-700 text-white"
+              >
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Start Broadcasting Using WebRTC
+              </Button>
+            ) : (
+              <div className="text-center text-sm text-green-600 font-medium mt-2 animate-pulse">
+                Broadcasting Active
+              </div>
             )}
           </CardContent>
         </Card>
@@ -140,9 +195,9 @@ export default function Home() {
             <form onSubmit={handleConnect} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="remote-id">Remote Session ID</Label>
-                <Input 
-                  id="remote-id" 
-                  placeholder="e.g., 123 456 789" 
+                <Input
+                  id="remote-id"
+                  placeholder="e.g., 123 456 789"
                   value={remoteId}
                   onChange={(e) => setRemoteId(e.target.value)}
                   className="font-code text-lg"
@@ -162,7 +217,73 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="mt-12 grid gap-8 md:grid-cols-2 lg:gap-12">
+        {/* Recent Connections Section */}
+        {filteredRecents.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Recent Connections
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {filteredRecents.map((recent) => (
+                  <div
+                    key={recent.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setRemoteId(recent.id)}
+                  >
+                    <div className="font-code text-lg">
+                      {recent.id.replace(/(\d{3})(?=\d)/g, '$1 ')}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(recent.timestamp).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Saved Machines Section (Only if logged in) */}
+        {user && savedMachines && savedMachines.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Laptop className="h-5 w-5" />
+                My Machines
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {savedMachines.map((machine: any) => (
+                  <div
+                    key={machine.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setRemoteId(machine.connectionId)}
+                  >
+                    <div>
+                      <div className="font-semibold">{machine.name}</div>
+                      <div className="text-sm text-muted-foreground font-code">
+                        {machine.connectionId.replace(/(\d{3})(?=\d)/g, '$1 ')}
+                      </div>
+                    </div>
+                    <div className={`h-2 w-2 rounded-full ${machine.status === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {hostStream && localId && (
+        <HostSessionHandler roomId={localId.replace(/\s/g, '')} stream={hostStream as MediaStream} />
+      )}
     </div>
   );
 }
-

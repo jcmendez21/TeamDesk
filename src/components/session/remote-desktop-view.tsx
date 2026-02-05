@@ -1,76 +1,72 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { useEffect, useRef, useState } from 'react';
+import { useWebRTC } from '@/hooks/use-webrtc';
 
-export default function RemoteDesktopView() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+interface RemoteDesktopViewProps {
+  sessionId: string;
+}
+
+export default function RemoteDesktopView({ sessionId }: RemoteDesktopViewProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  const isConnected = useRef(false);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
+  const { sendData, isConnected } = useWebRTC({
+    isInitiator: true, // Viewer initiates connection
+    roomId: sessionId,
+    onStream: (stream) => {
+      console.log("Receiving remote stream", stream);
+      setRemoteStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.error("Video play failed", e));
+      }
+    }
+  });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    // Send normalized coordinates
+    sendData({ type: 'mousemove', x, y });
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    sendData({ type: 'click', button: e.button });
+  };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const imageUrl = PlaceHolderImages.find((i) => i.id === 'machine-1')?.imageUrl;
-    if (imageUrl && !imageRef.current) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = imageUrl;
-      imageRef.current = img;
+    if (videoRef.current && remoteStream) {
+      videoRef.current.srcObject = remoteStream;
     }
-
-    const draw = () => {
-      if (!canvas || !container || !ctx) return;
-      canvas.width = container.offsetWidth;
-      canvas.height = container.offsetHeight;
-
-      if (isConnected.current && imageRef.current && imageRef.current.complete) {
-        ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = '24px "Open Sans"';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Simulating Connection...', canvas.width / 2, canvas.height / 2);
-      }
-    };
-    
-    draw(); // Initial draw
-
-    const image = imageRef.current;
-    if (image && !image.complete) {
-        image.onload = draw;
-    }
-
-    const connectionTimeout = setTimeout(() => {
-      isConnected.current = true;
-      draw();
-    }, 1500);
-
-
-    const resizeObserver = new ResizeObserver(draw);
-    resizeObserver.observe(container);
-
-    return () => {
-      resizeObserver.disconnect();
-      clearTimeout(connectionTimeout);
-      if (image) {
-        image.onload = null;
-      }
-    };
-  }, []);
+  }, [remoteStream]);
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-black rounded-lg overflow-hidden">
-      <canvas ref={canvasRef} />
+    <div
+      ref={containerRef}
+      className="w-full h-full bg-black rounded-lg overflow-hidden relative flex justify-center items-center group cursor-crosshair"
+      onMouseMove={handleMouseMove}
+      onClick={handleClick}
+    >
+      {!isConnected && (
+        <div className="absolute text-white/70 animate-pulse flex flex-col items-center gap-2">
+          <span className="text-xl font-bold">Connecting to {sessionId}...</span>
+          <span className="text-sm">Waiting for remote host...</span>
+        </div>
+      )}
+
+      <video
+        ref={videoRef}
+        className="w-full h-full object-contain"
+        autoPlay
+        playsInline
+        muted // Ensure autoplay works better
+      />
     </div>
   );
 }

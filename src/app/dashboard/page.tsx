@@ -77,10 +77,10 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [isUserLoading, user, router]);
-  
+
   async function onAddMachine(values: z.infer<typeof addMachineSchema>) {
     if (!user || !machinesQuery) return;
-    
+
     const newMachine = {
       name: values.name,
       description: values.description || '',
@@ -91,8 +91,8 @@ export default function DashboardPage() {
 
     addDocumentNonBlocking(machinesQuery, newMachine);
     toast({
-        title: 'Machine Added',
-        description: `The machine "${values.name}" has been added.`,
+      title: 'Machine Added',
+      description: `The machine "${values.name}" has been added.`,
     });
     form.reset();
     setIsAddMachineOpen(false);
@@ -135,7 +135,7 @@ export default function DashboardPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onAddMachine)} className="space-y-4 py-4">
-                 <FormField
+                <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
@@ -161,7 +161,7 @@ export default function DashboardPage() {
                     </FormItem>
                   )}
                 />
-                 <FormField
+                <FormField
                   control={form.control}
                   name="description"
                   render={({ field }) => (
@@ -174,8 +174,8 @@ export default function DashboardPage() {
                     </FormItem>
                   )}
                 />
-                 <DialogFooter>
-                    <Button type="submit">Save Machine</Button>
+                <DialogFooter>
+                  <Button type="submit">Save Machine</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -186,64 +186,64 @@ export default function DashboardPage() {
       <h2 className="font-headline text-3xl font-bold mb-6">My Machines</h2>
       {machines && machines.length > 0 ? (
         <BentoGrid className="mx-auto max-w-none">
-            {machines.map((item, i) => {
-                 const placeholder = PlaceHolderImages[i % PlaceHolderImages.length];
-                 const header = (
-                     <Image
-                         src={placeholder.imageUrl}
-                         alt={item.name}
-                         fill
-                         className="object-cover"
-                         data-ai-hint={placeholder.imageHint}
-                     />
-                 );
-                return (
-                    <BentoGridItem
-                        key={item.id}
-                        id={item.connectionId}
-                        title={item.name}
-                        description={item.description}
-                        header={header}
-                        status={item.status as 'online' | 'offline'}
-                        className={'md:col-span-2'}
-                    />
-                )
-            })}
+          {machines.map((item, i) => {
+            const placeholder = PlaceHolderImages[i % PlaceHolderImages.length];
+            const header = (
+              <Image
+                src={placeholder.imageUrl}
+                alt={item.name}
+                fill
+                className="object-cover"
+                data-ai-hint={placeholder.imageHint}
+              />
+            );
+            return (
+              <BentoGridItem
+                key={item.id}
+                id={item.connectionId}
+                title={item.name}
+                description={item.description}
+                header={header}
+                status={item.status as 'online' | 'offline'}
+                className={'md:col-span-2'}
+              />
+            )
+          })}
         </BentoGrid>
       ) : (
         <Card className="text-center py-12">
-            <CardContent className="pt-6">
-                <h3 className="text-xl font-semibold">No Machines Yet</h3>
-                <p className="text-muted-foreground mt-2">Click "Add New Machine" to get started.</p>
-            </CardContent>
+          <CardContent className="pt-6">
+            <h3 className="text-xl font-semibold">No Machines Yet</h3>
+            <p className="text-muted-foreground mt-2">Click "Add New Machine" to get started.</p>
+          </CardContent>
         </Card>
       )}
 
       <div className="mt-16">
         <h2 className="font-headline text-3xl font-bold mb-6">Recent Sessions</h2>
         <Card>
-            <CardContent className="pt-6">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Connection ID</TableHead>
-                            <TableHead>Machine</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead className="text-right">Duration</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {recentSessions.map((session) => (
-                        <TableRow key={session.id}>
-                            <TableCell className="font-medium font-code">{session.connectionId}</TableCell>
-                            <TableCell className="font-medium">{session.machineName}</TableCell>
-                            <TableCell>{session.date}</TableCell>
-                            <TableCell className="text-right">{session.duration}</TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
+          <CardContent className="pt-6">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Connection ID</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Duration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentSessions.map((session) => (
+                  <TableRow key={session.id}>
+                    <TableCell className="font-medium font-code">{session.connectionId}</TableCell>
+                    <TableCell className="font-medium">{session.machineName}</TableCell>
+                    <TableCell>{session.date}</TableCell>
+                    <TableCell className="text-right">{session.duration}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
         </Card>
       </div>
     </div>
@@ -251,53 +251,53 @@ export default function DashboardPage() {
 }
 
 function DashboardLoadingSkeleton() {
-    return (
-        <div className="container py-12">
-            <div className="flex justify-between items-center mb-12">
-                <div className="space-y-2">
-                    <Skeleton className="h-12 w-80" />
-                    <Skeleton className="h-6 w-96" />
-                </div>
-                <Skeleton className="h-10 w-44" />
-            </div>
-
-            <Skeleton className="h-8 w-64 mb-6" />
-            <div className="grid md:auto-rows-[18rem] grid-cols-1 md:grid-cols-4 gap-4">
-                {[...Array(2)].map((_, i) => (
-                    <div key={i} className={cn('row-span-1 rounded-xl p-4 bg-card border flex flex-col space-y-4', 'md:col-span-2')}>
-                        <Skeleton className="flex-1 w-full h-full min-h-[6rem] rounded-xl" />
-                        <div className="space-y-2">
-                           <Skeleton className="h-6 w-3/4" />
-                           <Skeleton className="h-4 w-full" />
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            <div className="mt-16">
-                 <Skeleton className="h-8 w-64 mb-6" />
-                 <Card>
-                     <CardContent className="pt-6">
-                         <div className="space-y-4">
-                            <div className="flex justify-between items-center h-8 px-4">
-                                <Skeleton className="w-1/4 h-5" />
-                                <Skeleton className="w-1/4 h-5" />
-                                <Skeleton className="w-1/4 h-5" />
-                                <Skeleton className="w-1/4 h-5" />
-                            </div>
-                            <div className="border-t"></div>
-                            {[...Array(3)].map((_, i) => (
-                                <div key={i} className="flex justify-between items-center h-10 px-4 border-b">
-                                    <Skeleton className="w-1/4 h-5" />
-                                    <Skeleton className="w-1/4 h-5" />
-                                    <Skeleton className="w-1/4 h-5" />
-                                    <Skeleton className="w-1/4 h-5" />
-                                </div>
-                            ))}
-                         </div>
-                     </CardContent>
-                 </Card>
-            </div>
+  return (
+    <div className="container py-12">
+      <div className="flex justify-between items-center mb-12">
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-80" />
+          <Skeleton className="h-6 w-96" />
         </div>
-    )
+        <Skeleton className="h-10 w-44" />
+      </div>
+
+      <Skeleton className="h-8 w-64 mb-6" />
+      <div className="grid md:auto-rows-[18rem] grid-cols-1 md:grid-cols-4 gap-4">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className={cn('row-span-1 rounded-xl p-4 bg-card border flex flex-col space-y-4', 'md:col-span-2')}>
+            <Skeleton className="flex-1 w-full h-full min-h-[6rem] rounded-xl" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-16">
+        <Skeleton className="h-8 w-64 mb-6" />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center h-8 px-4">
+                <Skeleton className="w-1/4 h-5" />
+                <Skeleton className="w-1/4 h-5" />
+                <Skeleton className="w-1/4 h-5" />
+                <Skeleton className="w-1/4 h-5" />
+              </div>
+              <div className="border-t"></div>
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex justify-between items-center h-10 px-4 border-b">
+                  <Skeleton className="w-1/4 h-5" />
+                  <Skeleton className="w-1/4 h-5" />
+                  <Skeleton className="w-1/4 h-5" />
+                  <Skeleton className="w-1/4 h-5" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }
