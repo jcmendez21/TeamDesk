@@ -45,3 +45,4 @@ firebase-debug.log
 firestore-debug.log
 
 /firebase/firestore/config.ts
+src/firebase/config.ts
