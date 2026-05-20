@@ -90,6 +90,12 @@ const runtime = {
     password,
     passwordHash: (0, node_crypto_1.createHash)('sha256').update(password, 'utf8').digest('hex'),
 };
+// eslint-disable-next-line no-console
+console.log('[agent] boot:', {
+    connectionId: runtime.connectionId,
+    password: runtime.password,
+    signalingUrl: runtime.signalingUrl,
+});
 const injector = input_injector_1.InputInjectorFactory.create();
 // ── Window lifecycle ───────────────────────────────────────────────────────
 let mainWindow = null;
