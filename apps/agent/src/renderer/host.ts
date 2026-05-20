@@ -31,6 +31,8 @@ interface BootstrapInfo {
   signalingUrl: string;
   scope: string;
   platform: string;
+  password: string;
+  passwordHash: string;
 }
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
@@ -50,12 +52,16 @@ async function main(): Promise<void> {
   // 1. Pull bootstrap info from main.
   const info: BootstrapInfo = await ipcRenderer.invoke('agent:bootstrap');
   $('connId').textContent = formatConnId(info.connectionId);
+  $('connPwd').textContent = info.password;
   $('scope').textContent = info.scope;
   $('signalingUrl').textContent = trimUrl(info.signalingUrl);
   $('platform').textContent = info.platform;
 
   $('connId').addEventListener('click', () => {
     navigator.clipboard.writeText(info.connectionId).catch(() => {});
+  });
+  $('connPwd').addEventListener('click', () => {
+    navigator.clipboard.writeText(info.password).catch(() => {});
   });
   $('stop').addEventListener('click', () => {
     ipcRenderer.send('agent:stop-sharing');
@@ -87,7 +93,21 @@ async function main(): Promise<void> {
   });
 
   socket.on('connect', () => {
-    socket.emit('join-room', info.connectionId, `agent-${socket.id}`);
+    // Register as the room's host with the password hash. The cleartext
+    // password never leaves this process — only the hash crosses the
+    // wire, and the server can only ever do constant-time-compare against
+    // it (not invert it).
+    socket.emit('register-room', {
+      roomId: info.connectionId,
+      passwordHash: info.passwordHash,
+    });
+  });
+
+  socket.on('registered', () => {
+    setStatus('waiting for operator…', 'amber');
+  });
+  socket.on('register-error', (data: { reason: string }) => {
+    setStatus(`register failed: ${data.reason}`, 'red');
   });
 
   // 4. simple-peer as non-initiator; create a fresh peer per incoming

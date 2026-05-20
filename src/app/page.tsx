@@ -105,6 +105,12 @@ export default function Home() {
     if (remoteId.replace(/\s/g, "").length === 9) {
       const cleanId = remoteId.replace(/\s/g, "");
       addRecent(cleanId);
+      // Stash the password under a per-session key. The session page
+      // reads it back and hands it to the mediator. sessionStorage is
+      // scoped per tab so a second tab won't see another operator's pw.
+      const passwordInput = (e.currentTarget as HTMLFormElement).elements.namedItem('remote-password') as HTMLInputElement | null;
+      const pw = passwordInput?.value ?? '';
+      sessionStorage.setItem(`teamdesk:pwd:${cleanId}`, pw);
       router.push(`/session/${cleanId}`);
     } else {
       toast({
@@ -207,7 +213,7 @@ export default function Home() {
                 <Label htmlFor="remote-password">Password</Label>
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input id="remote-password" type="password" placeholder="Enter password" className="pl-10" />
+                  <Input id="remote-password" name="remote-password" type="password" placeholder="Enter password" className="pl-10" />
                 </div>
               </div>
               <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">

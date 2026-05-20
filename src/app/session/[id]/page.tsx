@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { ScopeId } from '@/domain/scopes';
 import { useSession, SessionContextProvider } from '@/hooks/use-session';
+import { useToast } from '@/hooks/use-toast';
 import { TopBar } from '@/components/session/top-bar';
 import { AccessScopes } from '@/components/session/access-scopes';
 import { SessionInfo } from '@/components/session/session-info';
@@ -12,6 +13,12 @@ import { ActionBar } from '@/components/session/action-bar';
 import { ChatPanel } from '@/components/session/chat-panel';
 import { TransferQueue } from '@/components/session/transfer-queue';
 import { AuditFeed } from '@/components/session/audit-feed';
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  'no-such-room': 'No host is registered with that connection ID.',
+  'bad-password': 'Wrong password.',
+  'password-required': 'This host requires a password.',
+};
 
 /**
  * SessionPage — operator console for a live remote-control session.
@@ -22,11 +29,24 @@ import { AuditFeed } from '@/components/session/audit-feed';
 export default function SessionPage(): React.ReactElement {
   const params = useParams();
   const router = useRouter();
+  const { toast } = useToast();
   const sessionId = Array.isArray(params?.id) ? params.id[0] : (params?.id as string);
 
   const [activeScope, setActiveScope] = useState<ScopeId>('SCREEN_FILES');
   const sessionStart = useMemo(() => new Date(), []);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
+
+  // Pull the password the home page stashed before navigation. useMemo
+  // so the mediator (created once via ref inside useSession) sees a
+  // stable value across renders. Empty string is fine — signaling
+  // distinguishes "no password" from "wrong password".
+  const password = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const pw = sessionStorage.getItem(`teamdesk:pwd:${sessionId}`) ?? '';
+    // One-shot read: clear immediately so it isn't reused on F5 / share.
+    sessionStorage.removeItem(`teamdesk:pwd:${sessionId}`);
+    return pw;
+  }, [sessionId]);
 
   useEffect(() => {
     const id = setInterval(() => setUptimeSeconds((s) => s + 1), 1000);
@@ -38,7 +58,22 @@ export default function SessionPage(): React.ReactElement {
     connectionId: sessionId,
     role: 'operator',
     initialScope: activeScope,
+    password,
   });
+
+  // Auth failure → toast + bounce back home.
+  useEffect(() => {
+    return session.mediator.on((ev) => {
+      if (ev.type === 'auth-error') {
+        toast({
+          title: 'Cannot join session',
+          description: AUTH_ERROR_MESSAGES[ev.reason] ?? ev.reason,
+          variant: 'destructive',
+        });
+        router.push('/');
+      }
+    });
+  }, [session.mediator, router, toast]);
 
   // Keep mediator's scope in sync if user picks a different one.
   useEffect(() => {

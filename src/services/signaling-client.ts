@@ -71,6 +71,23 @@ export class SignalingClient {
     this.socket.emit('join-room', roomId, userId);
   }
 
+  /** Operator-side authenticated join. Password goes in cleartext to the
+   *  server (over TLS in prod); the server compares against the stored
+   *  hash. Listen via `onAuthError` for failures. */
+  joinRoomSecure(roomId: string, password: string, userId?: string): void {
+    this.connect();
+    this.socket.emit('join-room-secure', { roomId, password, userId });
+  }
+
+  onAuthError(handler: (data: { reason: string }) => void): () => void {
+    this.socket.on('auth-error', handler);
+    return () => this.socket.off('auth-error', handler);
+  }
+  onJoinOk(handler: (data: { roomId: string }) => void): () => void {
+    this.socket.on('join-ok', handler);
+    return () => this.socket.off('join-ok', handler);
+  }
+
   sendOffer(payload: SignalPayload): void {
     this.socket.emit('offer', payload);
   }

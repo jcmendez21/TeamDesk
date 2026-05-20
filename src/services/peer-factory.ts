@@ -60,6 +60,11 @@ export interface RemotePeerOptions {
   /** Local stream — only the host (broadcaster) provides this. */
   stream?: MediaStream | null;
   iceServers?: RTCIceServer[];
+  /** Cleartext password for authenticated join (operator side). Sent to
+   *  signaling, which compares against the host's pre-registered hash. */
+  password?: string;
+  /** Fires if signaling rejects the join (bad password, no such room). */
+  onAuthError?: (reason: string) => void;
 }
 
 export class RemotePeer {
@@ -222,9 +227,17 @@ export class RemotePeer {
       sig.onOffer(handleOffer),
       sig.onAnswer(feed),
       sig.onIceCandidate(feed),
+      sig.onAuthError(({ reason }) => this.opts.onAuthError?.(reason)),
     );
 
-    sig.joinRoom(this.opts.roomId);
+    // Empty password means the operator didn't provide one; use the
+    // unauthenticated path. Signaling will reject with `password-required`
+    // if the target room was actually registered with a password.
+    if (this.opts.role === 'operator' && this.opts.password) {
+      sig.joinRoomSecure(this.opts.roomId, this.opts.password);
+    } else {
+      sig.joinRoom(this.opts.roomId);
+    }
   }
 
   private tearDownPeer(): void {
@@ -240,8 +253,8 @@ export class RemotePeer {
 
 export class PeerConnectionFactory {
   /** The operator initiates the offer when no stream is being broadcast yet. */
-  static createOperator(roomId: string): RemotePeer {
-    const peer = new RemotePeer({ role: 'operator', roomId });
+  static createOperator(roomId: string, opts: { password?: string; onAuthError?: (r: string) => void } = {}): RemotePeer {
+    const peer = new RemotePeer({ role: 'operator', roomId, password: opts.password, onAuthError: opts.onAuthError });
     peer.start(true);
     return peer;
   }

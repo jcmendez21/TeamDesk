@@ -56,6 +56,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path = __importStar(require("node:path"));
+const node_crypto_1 = require("node:crypto");
 const input_injector_1 = require("./input-injector");
 // Inlined from `@teamdesk/shared/scopes` to avoid pulling the shared
 // workspace into the agent's compile output. The agent only needs this
@@ -67,12 +68,27 @@ const scopeCovers = (active, required) => (SCOPE_LEVEL[active] ?? 0) >= (SCOPE_L
 function generateConnectionId() {
     return Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
 }
+/**
+ * Random 8-char alphanumeric password. Enough entropy to defeat naive
+ * brute force against the signaling server for the brief lifetime of an
+ * agent session, while staying short enough to dictate over the phone.
+ * Using `randomBytes` (CSPRNG), not Math.random.
+ */
+function generatePassword() {
+    const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'; // no 0/o/1/i to reduce dictation errors
+    const bytes = (0, node_crypto_1.randomBytes)(8);
+    let out = '';
+    for (let i = 0; i < 8; i++)
+        out += alphabet[bytes[i] % alphabet.length];
+    return out;
+}
+const password = generatePassword();
 const runtime = {
     scope: 'SCREEN_CONTROL',
     connectionId: generateConnectionId(),
-    // Renderer reads this via IPC at startup; falls back to localhost so dev
-    // works without env. In prod set TEAMDESK_SIGNALING_URL when launching.
     signalingUrl: process.env.TEAMDESK_SIGNALING_URL ?? 'http://localhost:3000',
+    password,
+    passwordHash: (0, node_crypto_1.createHash)('sha256').update(password, 'utf8').digest('hex'),
 };
 const injector = input_injector_1.InputInjectorFactory.create();
 // ── Window lifecycle ───────────────────────────────────────────────────────
@@ -123,6 +139,10 @@ electron_1.ipcMain.handle('agent:bootstrap', () => ({
     signalingUrl: runtime.signalingUrl,
     scope: runtime.scope,
     platform: process.platform,
+    // Renderer needs the cleartext to *show* the user; the hash is what
+    // travels over signaling. They're equivalent for the room owner.
+    password: runtime.password,
+    passwordHash: runtime.passwordHash,
 }));
 electron_1.ipcMain.handle('agent:setScope', (_e, scope) => {
     runtime.scope = scope;

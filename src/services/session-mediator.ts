@@ -38,6 +38,8 @@ export interface SessionMediatorOptions {
   role: PeerRole;
   initialScope: ScopeId;
   stream?: MediaStream;
+  /** Operator-side: cleartext password forwarded to signaling. */
+  password?: string;
 }
 
 export type MediatorEvent =
@@ -45,7 +47,8 @@ export type MediatorEvent =
   | { type: 'closed' }
   | { type: 'stream'; stream: MediaStream }
   | { type: 'profile'; profile: QualityProfile }
-  | { type: 'telemetry'; stats: ConnectionStats };
+  | { type: 'telemetry'; stats: ConnectionStats }
+  | { type: 'auth-error'; reason: string };
 
 type MediatorListener = (event: MediatorEvent) => void;
 
@@ -65,7 +68,13 @@ export class SessionMediator {
 
   start(): void {
     this.peer = this.opts.role === 'operator'
-      ? PeerConnectionFactory.createOperator(this.opts.connectionId)
+      ? PeerConnectionFactory.createOperator(this.opts.connectionId, {
+          password: this.opts.password,
+          onAuthError: (reason) => {
+            auditBus.log(this.opts.sessionId, 'SCOPE_DENIED', `Signaling auth failed: ${reason}`);
+            this.emit({ type: 'auth-error', reason });
+          },
+        })
       : PeerConnectionFactory.createHost(this.opts.connectionId, this.opts.stream!);
 
     this.peer.onConnect(() => {

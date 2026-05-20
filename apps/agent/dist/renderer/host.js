@@ -11000,11 +11000,16 @@
   async function main() {
     const info = await import_electron.ipcRenderer.invoke("agent:bootstrap");
     $("connId").textContent = formatConnId(info.connectionId);
+    $("connPwd").textContent = info.password;
     $("scope").textContent = info.scope;
     $("signalingUrl").textContent = trimUrl(info.signalingUrl);
     $("platform").textContent = info.platform;
     $("connId").addEventListener("click", () => {
       navigator.clipboard.writeText(info.connectionId).catch(() => {
+      });
+    });
+    $("connPwd").addEventListener("click", () => {
+      navigator.clipboard.writeText(info.password).catch(() => {
       });
     });
     $("stop").addEventListener("click", () => {
@@ -11026,7 +11031,16 @@
       transports: ["websocket", "polling"]
     });
     socket.on("connect", () => {
-      socket.emit("join-room", info.connectionId, `agent-${socket.id}`);
+      socket.emit("register-room", {
+        roomId: info.connectionId,
+        passwordHash: info.passwordHash
+      });
+    });
+    socket.on("registered", () => {
+      setStatus("waiting for operator\u2026", "amber");
+    });
+    socket.on("register-error", (data) => {
+      setStatus(`register failed: ${data.reason}`, "red");
     });
     let peer = null;
     function createPeer() {

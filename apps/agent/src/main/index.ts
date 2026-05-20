@@ -22,6 +22,7 @@
 
 import { app, BrowserWindow, ipcMain, session, desktopCapturer } from 'electron';
 import * as path from 'node:path';
+import { createHash, randomBytes } from 'node:crypto';
 import type { InputMsg, ScopeId } from '../wire-types';
 import { InputInjectorFactory } from './input-injector';
 
@@ -40,18 +41,35 @@ interface AgentRuntime {
   scope: ScopeId;
   connectionId: string;
   signalingUrl: string;
+  password: string;
+  passwordHash: string;
 }
 
 function generateConnectionId(): string {
   return Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
 }
 
+/**
+ * Random 8-char alphanumeric password. Enough entropy to defeat naive
+ * brute force against the signaling server for the brief lifetime of an
+ * agent session, while staying short enough to dictate over the phone.
+ * Using `randomBytes` (CSPRNG), not Math.random.
+ */
+function generatePassword(): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'; // no 0/o/1/i to reduce dictation errors
+  const bytes = randomBytes(8);
+  let out = '';
+  for (let i = 0; i < 8; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
+const password = generatePassword();
 const runtime: AgentRuntime = {
   scope: 'SCREEN_CONTROL',
   connectionId: generateConnectionId(),
-  // Renderer reads this via IPC at startup; falls back to localhost so dev
-  // works without env. In prod set TEAMDESK_SIGNALING_URL when launching.
   signalingUrl: process.env.TEAMDESK_SIGNALING_URL ?? 'http://localhost:3000',
+  password,
+  passwordHash: createHash('sha256').update(password, 'utf8').digest('hex'),
 };
 
 const injector = InputInjectorFactory.create();
@@ -115,6 +133,10 @@ ipcMain.handle('agent:bootstrap', () => ({
   signalingUrl: runtime.signalingUrl,
   scope: runtime.scope,
   platform: process.platform,
+  // Renderer needs the cleartext to *show* the user; the hash is what
+  // travels over signaling. They're equivalent for the room owner.
+  password: runtime.password,
+  passwordHash: runtime.passwordHash,
 }));
 
 ipcMain.handle('agent:setScope', (_e, scope: ScopeId) => {
