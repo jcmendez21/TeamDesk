@@ -6,7 +6,7 @@
  * to grant it via System Settings — intentional friction, not a bug.
  */
 
-import type { InputMsg } from '@teamdesk/shared';
+import type { InputMsg } from '../../wire-types';
 import type { InputInjector } from './index';
 
 export class MacInjector implements InputInjector {

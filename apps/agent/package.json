@@ -5,17 +5,27 @@
   "description": "TeamDesk host agent — Electron service that runs on the controlled machine",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "echo \"Agent dev mode — run 'npm install' in this workspace first, then 'electron .'\" && exit 0",
-    "build": "echo \"Agent build — wires up after Step 9 of the plan\" && exit 0",
-    "typecheck": "tsc --noEmit"
+    "build:main": "tsc",
+    "build:renderer": "esbuild src/renderer/host.ts --bundle --platform=browser --format=iife --target=chrome120 --external:electron --outfile=dist/renderer/host.js",
+    "build:assets": "node scripts/copy-assets.js",
+    "build": "npm run build:main && npm run build:renderer && npm run build:assets",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && electron-builder"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@teamdesk/shared": "*",
-    "electron": "^42.1.0",
-    "electron-builder": "^26.8.1"
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@types/simple-peer": "^9.11.9",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.27.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

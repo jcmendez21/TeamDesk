@@ -6,7 +6,7 @@
  * (UAC prompts) — that requirement comes from Windows, not from us.
  */
 
-import type { InputMsg } from '@teamdesk/shared';
+import type { InputMsg } from '../../wire-types';
 import type { InputInjector } from './index';
 
 export class WindowsInjector implements InputInjector {

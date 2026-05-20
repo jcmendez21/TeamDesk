@@ -1,3 +1,4 @@
+"use strict";
 /**
  * LinuxInjector — XTest under X11, uinput under Wayland.
  *
@@ -6,13 +7,12 @@
  * `xdg-desktop-portal`); document the failure mode rather than silently
  * dropping inputs.
  */
-
-import type { InputMsg } from '../../wire-types';
-import type { InputInjector } from './index';
-
-export class LinuxInjector implements InputInjector {
-  async inject(msg: InputMsg): Promise<void> {
-    // eslint-disable-next-line no-console
-    console.log('[LinuxInjector] stub:', msg.type);
-  }
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LinuxInjector = void 0;
+class LinuxInjector {
+    async inject(msg) {
+        // eslint-disable-next-line no-console
+        console.log('[LinuxInjector] stub:', msg.type);
+    }
 }
+exports.LinuxInjector = LinuxInjector;

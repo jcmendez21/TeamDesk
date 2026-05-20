@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { capsForScope, type ScopeId } from '@/domain/scopes';
 import { useInputChannel } from '@/hooks/use-input-channel';
+import type { KeyModifiers } from '@teamdesk/shared';
 
 interface VideoCanvasProps {
   stream: MediaStream | null;
@@ -11,6 +12,13 @@ interface VideoCanvasProps {
   /** When true, overlay shows the operator is broadcasting (host UI). */
   isHost?: boolean;
 }
+
+const modsFromEvent = (e: React.KeyboardEvent): KeyModifiers => ({
+  ctrl: e.ctrlKey,
+  alt: e.altKey,
+  shift: e.shiftKey,
+  meta: e.metaKey,
+});
 
 /**
  * VideoCanvas — renders the remote stream and forwards mouse/wheel events
@@ -54,14 +62,43 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
     send({ type: 'mouseup', x, y, button: e.button as 0 | 1 | 2 });
   };
 
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
+    if (!caps.canControl || isHost) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    send({ type: 'wheel', x, y, dx: e.deltaX, dy: e.deltaY });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (!caps.canControl || isHost) return;
+    // Block the browser's default for the focused canvas so arrow keys,
+    // tab, and shortcuts route to the remote instead of the page.
+    e.preventDefault();
+    send({ type: 'keydown', code: e.code, key: e.key, modifiers: modsFromEvent(e) });
+  };
+
+  const onKeyUp = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (!caps.canControl || isHost) return;
+    e.preventDefault();
+    send({ type: 'keyup', code: e.code, key: e.key, modifiers: modsFromEvent(e) });
+  };
+
   return (
     <section className="rounded-md overflow-hidden relative" style={{ background: 'var(--session-panel)', border: '1px solid var(--border-soft)' }}>
       <div
-        className="relative h-[460px] rounded-md m-2 overflow-hidden"
+        // tabIndex=0 makes the div focusable so it can receive keyboard
+        // events. Clicking it grabs focus naturally; the outline is
+        // suppressed in favor of the existing border styling.
+        tabIndex={0}
+        className="relative h-[460px] rounded-md m-2 overflow-hidden outline-none"
         style={{ border: '1px solid var(--border-mid)', background: '#000' }}
         onMouseMove={onMove}
-        onMouseDown={onMouseDown}
+        onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).focus(); onMouseDown(e); }}
         onMouseUp={onMouseUp}
+        onWheel={onWheel}
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
         onContextMenu={(e) => e.preventDefault()}
       >
         {stream ? (

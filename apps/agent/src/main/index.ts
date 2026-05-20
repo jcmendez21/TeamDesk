@@ -1,70 +1,151 @@
 /**
- * Agent main entry point.
+ * Agent main entry — Electron app lifecycle + IPC bridge to the renderer.
  *
- * Wires the four subsystems together at boot:
- *   - IpcBridge (Singleton)        ← renderer status UI talks here
- *   - InputInjector (Factory)      ← consumes scope-guarded input msgs
- *   - CaptureAdapter (Factory)     ← lists screens, builds constraints
- *   - AgentFileSystem              ← list / read / write under ACL
+ * Architecture:
+ *   - Main process (this file): owns the Electron window, registers the
+ *     desktopCapturer source automatically (no system "choose what to
+ *     share" dialog), and performs native input injection via nut-js.
+ *   - Renderer (renderer/host.ts): runs Chromium + WebRTC. Captures the
+ *     screen via getDisplayMedia (which main short-circuits to the primary
+ *     screen), opens a Socket.IO connection to the signaling server, and
+ *     becomes the host peer for any operator that joins its room.
+ *   - IPC: renderer forwards incoming input messages to main; main calls
+ *     into `InputInjectorFactory.create()` which dispatches to the OS
+ *     adapter (Windows/macOS/Linux via @nut-tree-fork/nut-js).
  *
- * The agent connects to the same Socket.IO signaling server as the web
- * operator (URL is read from env at boot) and identifies itself with
- * `role: 'agent'`. WebRTC then flows peer-to-peer between operator and
- * agent — exactly as in the web-only MVP, except now native modules are
- * on the receiving end of the input data channel.
+ * No browser "you are sharing your screen" banner: that bar only appears
+ * for `getDisplayMedia` calls inside a regular browser context. Inside
+ * Electron with a registered `setDisplayMediaRequestHandler`, capture is
+ * frictionless — the user already installed the agent, they're consenting
+ * by running it.
  */
 
-import { getIpcBridge } from '../ipc/bridge';
+import { app, BrowserWindow, ipcMain, session, desktopCapturer } from 'electron';
+import * as path from 'node:path';
+import type { InputMsg, ScopeId } from '../wire-types';
 import { InputInjectorFactory } from './input-injector';
-import { CaptureAdapterFactory } from './capture';
-import { AgentFileSystem } from './file-system';
-import type { InputMsg, FileMsg } from '@teamdesk/shared';
-import { scopeCovers, type ScopeId } from '@teamdesk/shared';
+
+// Inlined from `@teamdesk/shared/scopes` to avoid pulling the shared
+// workspace into the agent's compile output. The agent only needs this
+// one tiny function at runtime; everything else from shared is type-only.
+const SCOPE_LEVEL: Record<ScopeId, number> = {
+  SCREEN_ONLY: 1, SCREEN_CONTROL: 2, SCREEN_FILES: 3, FULL_CONTROL: 4,
+};
+const scopeCovers = (active: ScopeId, required: ScopeId): boolean =>
+  (SCOPE_LEVEL[active] ?? 0) >= (SCOPE_LEVEL[required] ?? Infinity);
+
+// ── Mutable runtime ────────────────────────────────────────────────────────
 
 interface AgentRuntime {
   scope: ScopeId;
-  setScope(s: ScopeId): void;
+  connectionId: string;
+  signalingUrl: string;
 }
 
-function createRuntime(): AgentRuntime {
-  let scope: ScopeId = 'SCREEN_ONLY';
-  return {
-    get scope() { return scope; },
-    setScope(s: ScopeId) { scope = s; },
-  };
+function generateConnectionId(): string {
+  return Math.floor(100_000_000 + Math.random() * 900_000_000).toString();
 }
 
-async function bootstrap(): Promise<void> {
-  const runtime = createRuntime();
-  const ipc = getIpcBridge();
-  const injector = InputInjectorFactory.create();
-  const capture = CaptureAdapterFactory.create();
-  const fs = new AgentFileSystem();
+const runtime: AgentRuntime = {
+  scope: 'SCREEN_CONTROL',
+  connectionId: generateConnectionId(),
+  // Renderer reads this via IPC at startup; falls back to localhost so dev
+  // works without env. In prod set TEAMDESK_SIGNALING_URL when launching.
+  signalingUrl: process.env.TEAMDESK_SIGNALING_URL ?? 'http://localhost:3000',
+};
 
-  // ── Renderer-facing IPC ────────────────────────────────────────────────
-  ipc.handle('agent:listSources', () => capture.listSources());
-  ipc.handle('agent:scope', () => runtime.scope);
-  ipc.on<[ScopeId]>('agent:setScope', (s) => runtime.setScope(s));
+const injector = InputInjectorFactory.create();
 
-  // ── Inbound from the operator ──────────────────────────────────────────
-  // The renderer holds the WebRTC connection (so it can attach the captured
-  // MediaStream directly) and forwards data-channel messages here. The
-  // scope check happens locally — even if the renderer is compromised, it
-  // cannot trick the main process into injecting beyond the active scope.
-  ipc.on<[InputMsg]>('agent:input', async (msg) => {
-    if (!scopeCovers(runtime.scope, 'SCREEN_CONTROL')) return;
+// ── Window lifecycle ───────────────────────────────────────────────────────
+
+let mainWindow: BrowserWindow | null = null;
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 460,
+    height: 360,
+    resizable: false,
+    title: 'TeamDesk Agent',
+    backgroundColor: '#07090d',
+    autoHideMenuBar: true,
+    webPreferences: {
+      // For this MVP we trust our own renderer code (we ship it, the user
+      // can't load arbitrary URLs). nodeIntegration lets the renderer
+      // require socket.io-client / simple-peer directly without bundling.
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  // Auto-open DevTools in development so renderer errors are visible. Set
+  // TEAMDESK_AGENT_DEV=0 to suppress this in packaged builds.
+  if (process.env.TEAMDESK_AGENT_DEV !== '0') {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
+  // Auto-select the primary screen when the renderer calls
+  // navigator.mediaDevices.getDisplayMedia(). This is the key bit that
+  // eliminates the system picker AND the browser-style sharing banner.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    async (_request, callback) => {
+      const sources = await desktopCapturer.getSources({ types: ['screen'] });
+      const primary = sources[0];
+      if (!primary) {
+        callback({}); // user gets a "no source" error in renderer — rare
+        return;
+      }
+      // The video constraint shape callback expects an electron-flavored
+      // MediaStreamSource. Audio left undefined (we don't relay sound yet).
+      callback({ video: primary });
+    },
+    { useSystemPicker: false },
+  );
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+// ── IPC handlers ───────────────────────────────────────────────────────────
+
+ipcMain.handle('agent:bootstrap', () => ({
+  connectionId: runtime.connectionId,
+  signalingUrl: runtime.signalingUrl,
+  scope: runtime.scope,
+  platform: process.platform,
+}));
+
+ipcMain.handle('agent:setScope', (_e, scope: ScopeId) => {
+  runtime.scope = scope;
+});
+
+// Input messages forwarded from the renderer (after WebRTC data channel
+// receives them). Scope is double-checked here — even if the renderer is
+// compromised, main never injects beyond what the active scope allows.
+ipcMain.on('agent:input', async (_e, msg: InputMsg) => {
+  if (!scopeCovers(runtime.scope, 'SCREEN_CONTROL')) return;
+  try {
     await injector.inject(msg);
-  });
-  ipc.handle<[FileMsg], unknown>('agent:file', async (_msg) => {
-    if (!scopeCovers(runtime.scope, 'SCREEN_FILES')) return { ok: false, reason: 'scope' };
-    // Real wiring lives in Step 9 follow-up — `fs` exposes the primitives,
-    // file-transfer-engine in shared will use it on the agent side.
-    void fs;
-    return { ok: true };
-  });
-}
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[agent] injection failed', err);
+  }
+});
 
-// In an installed Electron app this would be inside `app.whenReady()`. Here
-// the function is exported so the renderer host harness can call it during
-// dev, and the production main wraps it in the Electron app lifecycle.
-export { bootstrap };
+ipcMain.on('agent:stop-sharing', () => {
+  app.quit();
+});
+
+// ── App lifecycle ──────────────────────────────────────────────────────────
+
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});

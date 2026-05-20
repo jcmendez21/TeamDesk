@@ -1,3 +1,4 @@
+"use strict";
 /**
  * InputInjector — Factory + Adapter for OS-level input injection.
  *
@@ -12,17 +13,13 @@
  * (e.g. a DXGI-aware Windows injector that can post to the Secure
  * Desktop, which nut-js cannot reach).
  */
-
-import type { InputMsg } from '../../wire-types';
-
-export interface InputInjector {
-  inject(msg: InputMsg): Promise<void>;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InputInjectorFactory = void 0;
+class InputInjectorFactory {
+    static create() {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { NutInjector } = require('./nut-injector');
+        return new NutInjector();
+    }
 }
-
-export class InputInjectorFactory {
-  static create(): InputInjector {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { NutInjector } = require('./nut-injector');
-    return new NutInjector();
-  }
-}
+exports.InputInjectorFactory = InputInjectorFactory;
