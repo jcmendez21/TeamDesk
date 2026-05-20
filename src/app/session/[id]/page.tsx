@@ -100,21 +100,18 @@ export default function SessionPage(): React.ReactElement {
           onDisconnect={handleDisconnect}
         />
 
+        {/*
+          Responsive layout:
+            - mobile (default): single column, video first so the largest
+              piece of real-estate goes to what the operator is actually
+              looking at. Scopes/chat/audit stack underneath.
+            - lg+ (≥1024px): the 3-column desktop layout from the mockup.
+        */}
         <main
-          className="flex-1 grid gap-3 p-3"
-          style={{ gridTemplateColumns: '300px 1fr 360px', minHeight: 0 }}
+          className="flex-1 grid gap-3 p-3 lg:grid-cols-[300px_1fr_360px]"
+          style={{ minHeight: 0 }}
         >
-          <div className="flex flex-col gap-3">
-            <AccessScopes active={activeScope} onChange={setActiveScope} />
-            <SessionInfo
-              device={`HOST · ${sessionId}`}
-              scope={activeScope}
-              startedAt={sessionStart}
-              uptimeSeconds={uptimeSeconds}
-            />
-          </div>
-
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 lg:order-2">
             <VideoCanvas
               stream={session.remoteStream}
               scope={activeScope}
@@ -127,7 +124,17 @@ export default function SessionPage(): React.ReactElement {
             />
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:order-1">
+            <AccessScopes active={activeScope} onChange={setActiveScope} />
+            <SessionInfo
+              device={`HOST · ${sessionId}`}
+              scope={activeScope}
+              startedAt={sessionStart}
+              uptimeSeconds={uptimeSeconds}
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 lg:order-3">
             <ChatPanel sessionId={sessionId} role="operator" />
             <TransferQueue scope={activeScope} sessionId={sessionId} />
             <AuditFeed />
