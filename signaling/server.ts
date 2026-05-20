@@ -58,14 +58,20 @@ export function attachSignaling(httpServer: HttpServer, opts: AttachOptions = {}
 
     // ── Host registers a room with its password hash ─────────────────────
     socket.on('register-room', (payload: { roomId: string; passwordHash: string }) => {
+      // eslint-disable-next-line no-console
+      console.log(`[signaling] register-room from ${socket.id} :: room=${payload?.roomId ?? '?'} hashLen=${payload?.passwordHash?.length ?? 0}`);
       const { roomId, passwordHash } = payload ?? {};
       if (!roomId || typeof passwordHash !== 'string' || passwordHash.length < 16) {
         socket.emit('register-error', { reason: 'invalid-payload' });
+        // eslint-disable-next-line no-console
+        console.log(`[signaling] register rejected: invalid-payload (room=${roomId}, hashLen=${passwordHash?.length})`);
         return;
       }
       const existing = rooms.get(roomId);
       if (existing && existing.hostSocketId !== socket.id) {
         socket.emit('register-error', { reason: 'room-taken' });
+        // eslint-disable-next-line no-console
+        console.log(`[signaling] register rejected: room-taken (room=${roomId})`);
         return;
       }
       rooms.set(roomId, { passwordHash, hostSocketId: socket.id });
@@ -79,12 +85,16 @@ export function attachSignaling(httpServer: HttpServer, opts: AttachOptions = {}
     socket.on('join-room-secure', (payload: { roomId: string; password: string; userId?: string }) => {
       const { roomId, password, userId } = payload ?? {};
       const record = rooms.get(roomId);
+      // eslint-disable-next-line no-console
+      console.log(`[signaling] join-room-secure from ${socket.id} :: room=${roomId} known=${!!record} known-rooms=[${[...rooms.keys()].join(',')}]`);
       if (!record) {
         socket.emit('auth-error', { reason: 'no-such-room' });
         return;
       }
       if (sha256(password ?? '') !== record.passwordHash) {
         socket.emit('auth-error', { reason: 'bad-password' });
+        // eslint-disable-next-line no-console
+        console.log(`[signaling] auth-error bad-password on room ${roomId}`);
         return;
       }
       socket.join(roomId);
