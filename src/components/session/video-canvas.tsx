@@ -22,24 +22,44 @@ const modsFromEvent = (e: { ctrlKey: boolean; altKey: boolean; shiftKey: boolean
 });
 
 /**
+ * Compute the rectangle the video actually occupies inside the canvas,
+ * accounting for `object-contain` letterboxing. Without this, taps in
+ * the black bars get sent to the remote as if they were inside the video
+ * — making the remote cursor jump to wildly wrong positions on phones
+ * where the aspect ratio of the canvas and the captured screen differ.
+ */
+function computeVideoRect(canvas: DOMRect, intrinsicW: number, intrinsicH: number): {
+  offsetX: number; offsetY: number; width: number; height: number;
+} {
+  if (!intrinsicW || !intrinsicH) {
+    return { offsetX: 0, offsetY: 0, width: canvas.width, height: canvas.height };
+  }
+  const videoAspect = intrinsicW / intrinsicH;
+  const canvasAspect = canvas.width / canvas.height;
+  if (videoAspect > canvasAspect) {
+    // Video is wider than canvas → fills width, bars top+bottom.
+    const height = canvas.width / videoAspect;
+    return { offsetX: 0, offsetY: (canvas.height - height) / 2, width: canvas.width, height };
+  }
+  // Video is taller than canvas → fills height, bars left+right.
+  const width = canvas.height * videoAspect;
+  return { offsetX: (canvas.width - width) / 2, offsetY: 0, width, height: canvas.height };
+}
+
+/**
  * VideoCanvas — renders the remote stream and forwards mouse/touch/keyboard
  * events over the input channel when the active scope grants control.
  *
  * Mobile considerations:
- *   - Touch events are translated to mouse-equivalents so a tap fires a
- *     mousedown+mouseup at the touch coordinate.
- *   - `touch-action: none` on the canvas suppresses browser-native gestures
- *     (page scroll, pinch-zoom) so they don't fight our handlers.
- *   - A keyboard button focuses a hidden `<textarea>` to summon the soft
- *     keyboard on mobile. The textarea captures `keydown`/`keyup` directly,
- *     which is the only reliable cross-platform way to read soft-keyboard
- *     input on Android/iOS.
- *   - A fullscreen toggle calls the native Fullscreen API on the video
- *     container, so the video fills the screen — critical on phones where
- *     the rest of the operator dashboard is wasted chrome.
- *
- * Coordinates are normalized 0..1 so the host can map them to whatever
- * resolution it captured at — the wire format never embeds a pixel size.
+ *   - Touch events translate to mouse-equivalents; tap = click, drag = drag.
+ *   - Coordinates are normalized inside the *displayed video rectangle*,
+ *     not the canvas div, so letterboxing on mismatched aspect ratios
+ *     doesn't make the remote cursor jump.
+ *   - The mobile toolbar buttons stop propagation so the canvas's
+ *     `preventDefault` on touchstart doesn't kill their synthesized click.
+ *   - "Keyboard mode" pins focus on a hidden textarea — once enabled, the
+ *     soft keyboard stays open while the user taps the video so they can
+ *     mix mouse-clicks and typing without re-summoning the keyboard.
  */
 export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvasProps): React.ReactElement {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -48,6 +68,7 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
   const caps = capsForScope(scope);
   const { send } = useInputChannel();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [keyboardMode, setKeyboardMode] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -55,85 +76,111 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
     }
   }, [stream]);
 
-  // Sync local state with the browser's actual fullscreen state — covers
-  // the user pressing ESC, the OS swiping out of fullscreen, etc.
   useEffect(() => {
     const handler = (): void => setIsFullscreen(document.fullscreenElement === containerRef.current);
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // ── Coordinate helpers ─────────────────────────────────────────────────
+  // While keyboard mode is on, re-focus the textarea after any tap so the
+  // soft keyboard stays up. Without this, tapping the video shifts focus
+  // and Android closes the keyboard.
+  const refocusKeyboard = useCallback(() => {
+    if (keyboardMode && keyboardRef.current) keyboardRef.current.focus();
+  }, [keyboardMode]);
 
-  const coordsFromMouse = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+  // ── Coordinate normalization ────────────────────────────────────────────
+
+  const normalize = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    const container = containerRef.current;
+    const video = videoRef.current;
+    if (!container) return null;
+    const canvas = container.getBoundingClientRect();
+    const rect = computeVideoRect(canvas, video?.videoWidth ?? 0, video?.videoHeight ?? 0);
+    const localX = clientX - canvas.left - rect.offsetX;
+    const localY = clientY - canvas.top - rect.offsetY;
+    // Reject taps in the letterbox bars — they're meaningless on the remote.
+    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return null;
+    return { x: localX / rect.width, y: localY / rect.height };
   }, []);
 
-  const coordsFromTouch = useCallback((e: React.TouchEvent<HTMLDivElement>, touch: React.Touch) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: (touch.clientX - rect.left) / rect.width, y: (touch.clientY - rect.top) / rect.height };
-  }, []);
-
-  // ── Mouse (desktop) ────────────────────────────────────────────────────
+  // ── Mouse (desktop) ─────────────────────────────────────────────────────
 
   const onMouseMove = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (!caps.canControl || isHost) return;
-    const { x, y } = coordsFromMouse(e);
-    send({ type: 'mousemove', x, y });
+    const p = normalize(e.clientX, e.clientY);
+    if (p) send({ type: 'mousemove', x: p.x, y: p.y });
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (!caps.canControl || isHost) return;
-    (e.currentTarget as HTMLDivElement).focus();
-    const { x, y } = coordsFromMouse(e);
-    send({ type: 'mousedown', x, y, button: e.button as 0 | 1 | 2 });
+    const p = normalize(e.clientX, e.clientY);
+    if (!p) return;
+    if (!keyboardMode) (e.currentTarget as HTMLDivElement).focus();
+    send({ type: 'mousedown', x: p.x, y: p.y, button: e.button as 0 | 1 | 2 });
   };
 
   const onMouseUp = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (!caps.canControl || isHost) return;
-    const { x, y } = coordsFromMouse(e);
-    send({ type: 'mouseup', x, y, button: e.button as 0 | 1 | 2 });
+    const p = normalize(e.clientX, e.clientY);
+    if (!p) return;
+    send({ type: 'mouseup', x: p.x, y: p.y, button: e.button as 0 | 1 | 2 });
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
     if (!caps.canControl || isHost) return;
-    const { x, y } = coordsFromMouse(e);
-    send({ type: 'wheel', x, y, dx: e.deltaX, dy: e.deltaY });
+    const p = normalize(e.clientX, e.clientY);
+    if (!p) return;
+    send({ type: 'wheel', x: p.x, y: p.y, dx: e.deltaX, dy: e.deltaY });
   };
 
-  // ── Touch (mobile) ─────────────────────────────────────────────────────
+  // ── Touch (mobile) ──────────────────────────────────────────────────────
+
+  // Skip the canvas's touch handling when the tap actually landed on a
+  // button overlay — otherwise our `preventDefault` swallows the synthesized
+  // click. Without this, the keyboard / fullscreen / mode buttons never fire.
+  const targetIsButton = (e: React.TouchEvent | React.MouseEvent): boolean => {
+    const t = e.target as HTMLElement | null;
+    return !!t?.closest('[data-canvas-button="true"]');
+  };
 
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>): void => {
+    if (targetIsButton(e)) return;
     if (!caps.canControl || isHost) return;
-    e.preventDefault(); // suppress synthesized mouse events + page scroll
+    e.preventDefault();
     const touch = e.touches[0];
     if (!touch) return;
-    const { x, y } = coordsFromTouch(e, touch);
-    send({ type: 'mousemove', x, y });
-    send({ type: 'mousedown', x, y, button: 0 });
+    const p = normalize(touch.clientX, touch.clientY);
+    if (!p) return;
+    send({ type: 'mousemove', x: p.x, y: p.y });
+    send({ type: 'mousedown', x: p.x, y: p.y, button: 0 });
+    refocusKeyboard();
   };
 
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>): void => {
+    if (targetIsButton(e)) return;
     if (!caps.canControl || isHost) return;
     e.preventDefault();
     const touch = e.touches[0];
     if (!touch) return;
-    const { x, y } = coordsFromTouch(e, touch);
-    send({ type: 'mousemove', x, y });
+    const p = normalize(touch.clientX, touch.clientY);
+    if (!p) return;
+    send({ type: 'mousemove', x: p.x, y: p.y });
   };
 
   const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>): void => {
+    if (targetIsButton(e)) return;
     if (!caps.canControl || isHost) return;
     e.preventDefault();
-    // At touchend `touches` is empty — read the lifted finger from changedTouches.
     const touch = e.changedTouches[0];
     if (!touch) return;
-    const { x, y } = coordsFromTouch(e, touch);
-    send({ type: 'mouseup', x, y, button: 0 });
+    const p = normalize(touch.clientX, touch.clientY);
+    if (!p) return;
+    send({ type: 'mouseup', x: p.x, y: p.y, button: 0 });
+    refocusKeyboard();
   };
 
-  // ── Keyboard ───────────────────────────────────────────────────────────
+  // ── Keyboard ────────────────────────────────────────────────────────────
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (!caps.canControl || isHost) return;
@@ -147,16 +194,17 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
     send({ type: 'keyup', code: e.code, key: e.key, modifiers: modsFromEvent(e) });
   };
 
-  // Clear the textarea every input event so it doesn't accumulate a buffer
-  // that an autocorrect engine might later "replace" with weird artifacts.
   const onTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>): void => {
     (e.currentTarget as HTMLTextAreaElement).value = '';
   };
 
-  // ── Action button handlers ─────────────────────────────────────────────
+  // ── Buttons ─────────────────────────────────────────────────────────────
 
-  const openKeyboard = (): void => {
-    keyboardRef.current?.focus();
+  const toggleKeyboard = (): void => {
+    const next = !keyboardMode;
+    setKeyboardMode(next);
+    if (next) keyboardRef.current?.focus();
+    else keyboardRef.current?.blur();
   };
 
   const toggleFullscreen = async (): Promise<void> => {
@@ -176,14 +224,11 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
     >
       <div
         ref={containerRef}
-        // tabIndex=0 makes the div focusable so it receives keyboard events
-        // on desktop. Mobile soft keyboards target the hidden textarea below.
         tabIndex={0}
         className="relative h-[460px] rounded-md m-2 overflow-hidden outline-none select-none"
         style={{
           border: '1px solid var(--border-mid)',
           background: '#000',
-          // Stop the mobile browser from intercepting drags/pinches.
           touchAction: 'none',
           WebkitUserSelect: 'none',
         }}
@@ -239,31 +284,43 @@ export function VideoCanvas({ stream, scope, qualityLabel, isHost }: VideoCanvas
               {qualityLabel}
             </span>
           )}
+          {keyboardMode && (
+            <span
+              className="px-2 py-1 rounded font-mono text-[10px] animate-pulse"
+              style={{
+                color: 'var(--cyan)',
+                background: 'rgba(0,229,255,0.10)',
+                border: '1px solid rgba(0,229,255,0.45)',
+              }}
+            >
+              KBD · ON
+            </span>
+          )}
         </div>
 
-        {/* Floating mobile toolbar — also useful on desktop. The buttons
-            sit on the video so they survive fullscreen mode, where the
-            outer ActionBar isn't visible. */}
         {!isHost && (
           <div className="absolute top-3 right-3 flex items-center gap-2">
-            <IconButton onClick={openKeyboard} title="Show keyboard" disabled={!caps.canControl}>
-              <Keyboard size={14} />
+            <IconButton
+              onClick={toggleKeyboard}
+              title={keyboardMode ? 'Hide keyboard' : 'Show keyboard'}
+              disabled={!caps.canControl}
+              active={keyboardMode}
+            >
+              <Keyboard size={18} />
             </IconButton>
             <IconButton onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
             </IconButton>
           </div>
         )}
       </div>
 
-      {/* Off-screen textarea — clicking the keyboard button focuses this,
-          which triggers the soft keyboard on mobile. Key events are caught
-          and forwarded as InputMsgs identical to physical keyboard input. */}
       <textarea
         ref={keyboardRef}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onInput={onTextareaInput}
+        onBlur={() => setKeyboardMode(false)}
         aria-hidden="true"
         autoCapitalize="off"
         autoCorrect="off"
@@ -287,25 +344,40 @@ function IconButton({
   onClick,
   title,
   disabled,
+  active,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   disabled?: boolean;
+  active?: boolean;
 }): React.ReactElement {
+  // The data-attribute lets the canvas detect taps on this button via
+  // `closest('[data-canvas-button]')` and skip its preventDefault so the
+  // synthesized mobile `click` actually fires.
   return (
     <button
+      data-canvas-button="true"
       onClick={onClick}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
       title={title}
       disabled={disabled}
-      className="w-8 h-8 rounded grid place-items-center transition-colors"
+      className="grid place-items-center transition-colors"
       style={{
-        color: disabled ? 'var(--fg-3)' : 'var(--fg-1)',
-        background: 'rgba(7,9,13,0.7)',
-        border: '1px solid var(--border-mid)',
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        color: disabled ? 'var(--fg-3)' : active ? 'var(--cyan)' : 'var(--fg-0)',
+        background: active ? 'rgba(0,229,255,0.15)' : 'rgba(7,9,13,0.75)',
+        border: `1px solid ${active ? 'rgba(0,229,255,0.55)' : 'var(--border-mid)'}`,
         backdropFilter: 'blur(6px)',
         opacity: disabled ? 0.5 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
+        // Larger tap target than visible — Apple HIG / Material both
+        // suggest 44px minimum.
+        touchAction: 'manipulation',
       }}
     >
       {children}
