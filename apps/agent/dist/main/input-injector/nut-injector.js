@@ -118,6 +118,13 @@ class NutInjector {
                 await n.keyboard.releaseKey(key);
                 return;
             }
+            case 'type-text': {
+                // Mobile soft-keyboard path. `keyboard.type` handles unicode chars
+                // and special compositions that the keydown/keyup mapping can't.
+                if (msg.text)
+                    await n.keyboard.type(msg.text);
+                return;
+            }
             case 'cad': {
                 // SAS (Secure Attention Sequence) — only the OS itself can post
                 // Ctrl+Alt+Del to the Secure Desktop. nut-js can't reach that

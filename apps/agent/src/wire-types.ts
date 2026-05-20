@@ -26,5 +26,9 @@ export type InputMsg =
   | { type: 'wheel';     x: number; y: number; dx: number; dy: number }
   | { type: 'keydown';   code: string; key: string; modifiers: KeyModifiers }
   | { type: 'keyup';     code: string; key: string; modifiers: KeyModifiers }
+  /** Text-as-input. Mobile soft keyboards don't fire reliable keydown/keyup
+   *  events; the renderer captures the `input` event and forwards the
+   *  inserted text here. The agent calls keyboard.type(text). */
+  | { type: 'type-text'; text: string }
   | { type: 'cad' }
   | { type: 'clipboard'; text: string };

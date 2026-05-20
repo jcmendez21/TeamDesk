@@ -20,6 +20,11 @@ export type InputMsg =
   | { type: 'wheel';     x: number; y: number; dx: number; dy: number }
   | { type: 'keydown';   code: string; key: string; modifiers: KeyModifiers }
   | { type: 'keyup';     code: string; key: string; modifiers: KeyModifiers }
+  /** Text-as-input. Mobile soft keyboards (Android Chrome especially) don't
+   *  fire reliable keydown/keyup events — the renderer captures the
+   *  `input` event and forwards the inserted text here, and the agent
+   *  calls `keyboard.type(text)`. */
+  | { type: 'type-text'; text: string }
   | { type: 'cad' }                                        // Ctrl+Alt+Del / SAS
   | { type: 'clipboard'; text: string };
 
