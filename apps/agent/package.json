@@ -1,0 +1,21 @@
+{
+  "name": "@teamdesk/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeamDesk host agent — Electron service that runs on the controlled machine",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "echo \"Agent dev mode — run 'npm install' in this workspace first, then 'electron .'\" && exit 0",
+    "build": "echo \"Agent build — wires up after Step 9 of the plan\" && exit 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "@teamdesk/shared": "*",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TeamDesk Agent</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #07090d; color: #f2f4f8;
+      }
+      h1 { font-size: 16px; margin: 0 0 16px; letter-spacing: 0.04em; }
+      .card { background: #0e121a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+      .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+      .label { color: #8a8f9b; }
+      .value { color: #00e5ff; font-family: ui-monospace, monospace; }
+      button { background: #ef4444; color: #fff; border: 0; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>TEAMDESK · AGENT</h1>
+    <div class="card">
+      <div class="row"><span class="label">Status</span><span class="value" id="status">starting…</span></div>
+      <div class="row"><span class="label">Scope</span><span class="value" id="scope">—</span></div>
+      <div class="row"><span class="label">Operator</span><span class="value" id="operator">none</span></div>
+    </div>
+    <button id="stop">Stop sharing</button>
+    <script src="./index.js"></script>
+  </body>
+</html>

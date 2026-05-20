@@ -1,0 +1,30 @@
+appId: com.teamdesk.agent
+productName: TeamDesk Agent
+copyright: Copyright © TeamDesk
+directories:
+  output: out
+
+files:
+  - dist/**/*
+  - "!**/*.map"
+
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  target:
+    - dmg
+    - zip
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  publisherName: TeamDesk
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development

@@ -19,9 +19,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@teamdesk/shared": ["./shared/src/index.ts"],
+      "@teamdesk/shared/*": ["./shared/src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "shared/src/**/*.ts", "signaling/*.ts"],
+  "exclude": ["node_modules", "apps/agent", "signaling/dist"]
 }

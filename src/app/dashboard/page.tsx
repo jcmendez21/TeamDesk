@@ -20,18 +20,10 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
-
-// Firestore machine data type
-interface Machine {
-  id: string;
-  name: string;
-  description: string;
-  connectionId: string;
-  status: 'online' | 'offline';
-  userId: string;
-}
+import type { Machine } from '@/domain/types';
 
 const addMachineSchema = z.object({
   name: z.string().min(1, 'Machine name is required.'),
@@ -39,6 +31,8 @@ const addMachineSchema = z.object({
     message: 'Connection ID must be a 9-digit number.'
   }),
   description: z.string().optional(),
+  os: z.enum(['windows', 'macos', 'linux', 'unknown']).default('unknown'),
+  hostname: z.string().optional(),
 });
 
 // Mock data for recent sessions
@@ -69,6 +63,8 @@ export default function DashboardPage() {
       name: '',
       connectionId: '',
       description: '',
+      os: 'unknown',
+      hostname: '',
     },
   });
 
@@ -81,12 +77,17 @@ export default function DashboardPage() {
   async function onAddMachine(values: z.infer<typeof addMachineSchema>) {
     if (!user || !machinesQuery) return;
 
+    const now = Date.now();
     const newMachine = {
       name: values.name,
       description: values.description || '',
       connectionId: values.connectionId.replace(/\s/g, ''),
       userId: user.uid,
-      status: 'offline', // Default status
+      status: 'offline' as const,
+      os: values.os,
+      hostname: values.hostname || '',
+      createdAt: now,
+      updatedAt: now,
     };
 
     addDocumentNonBlocking(machinesQuery, newMachine);
@@ -157,6 +158,42 @@ export default function DashboardPage() {
                       <FormControl>
                         <Input placeholder="e.g., 123 456 789" {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="hostname"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hostname (optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., WS-FINANCE-04" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="os"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Operating System</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select OS" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="windows">Windows</SelectItem>
+                          <SelectItem value="macos">macOS</SelectItem>
+                          <SelectItem value="linux">Linux</SelectItem>
+                          <SelectItem value="unknown">Unknown</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

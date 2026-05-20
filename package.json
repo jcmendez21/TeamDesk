@@ -1,10 +1,16 @@
 {
-  "name": "nextn",
+  "name": "teamdesk",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "shared",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "tsx server.ts",
     "dev:next": "next dev --turbopack -p 9002",
+    "dev:agent": "npm --workspace apps/agent run dev",
+    "build:agent": "npm --workspace apps/agent run build",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "NODE_ENV=production next build",

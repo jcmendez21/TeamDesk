@@ -83,3 +83,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Session console palette ───────────────────────────────────────────────
+   Tokens used only by the new operator session UI (top bar, scopes, video
+   canvas, audit feed). Kept outside the `--background`/`--primary` tokens
+   so the rest of the app keeps the warm orange theme from the blueprint.
+   Colors are sRGB hex on purpose — they're consumed via inline styles in
+   tightly-themed visualizations rather than Tailwind utilities. */
+:root {
+  --session-bg: #07090d;
+  --session-panel: #0e121a;
+  --session-panel-2: #12161f;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --border-mid: rgba(255, 255, 255, 0.10);
+  --fg-0: #f2f4f8;
+  --fg-1: #c5cad4;
+  --fg-2: #8a8f9b;
+  --fg-3: #5a5f6a;
+  --cyan: #00e5ff;
+  --cyan-glow: rgba(0, 229, 255, 0.45);
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.45);
+  --amber: #f59e0b;
+  --amber-glow: rgba(245, 158, 11, 0.45);
+  --crimson: #ef4444;
+  --crimson-glow: rgba(239, 68, 68, 0.45);
+  --violet: #a78bfa;
+}
